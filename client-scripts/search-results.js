@@ -32,6 +32,23 @@
     var COUNTS_TTL = 5 * 60 * 1000;      // 同一个词的计数结果缓存 5 分钟（返回搜索页时 0 请求）
     var COUNTS_KEY = 'featureEnhanceCounts:';
     var LIST_LIMIT_MAX = 500;      // 与服务端 MaxLimit 一致
+    // 按 id 回原生接口取详情时每批多少个。一个 GUID 是 32 字符 + 逗号，Kestrel 的请求行上限是 8KB：
+    // 300 个 id ≈ 10KB → HTTP 414 URI Too Long，promise 被拒 → 播放/随机播放"点了没反应"（实测踩到过）。
+    // 40 个一批 ≈ 1.4KB，稳。
+    var IDS_PER_REQUEST = 40;
+
+    // 条目级筛选（播放状态/分辨率/字幕/标签/字母…）。**文件夹格子不套这些**：
+    // 文件夹是容器，用户搜的是"哪些文件夹"，而且实测列表页会自发带上一个 IsFavorite
+    // （筛选按钮上还会显示角标 1），一旦套到"按 id 取详情"上，9 个文件夹就变 0 张卡片。
+    // 关键是三处口径必须一致：插件查询、按 id 取详情、播放下钻。
+    var ITEM_FILTER_KEYS = ['Filters', 'IsFavorite', 'Is4K', 'IsHD', 'Is3D', 'HasSubtitles', 'HasTrailer',
+        'HasSpecialFeature', 'HasThemeSong', 'HasThemeVideo', 'VideoTypes', 'GenreIds', 'Tags',
+        'NameStartsWith', 'NameLessThan', 'SeriesStatus'];
+
+    function stripItemFilters(opts) {
+        for (var i = 0; i < ITEM_FILTER_KEYS.length; i++) { delete opts[ITEM_FILTER_KEYS[i]]; }
+        return opts;
+    }
 
     // 四个方格：key -> 类型集合
     var TILES = [
@@ -557,22 +574,17 @@
                 if (!rows.length) { return { Items: [], TotalRecordCount: total, StartIndex: startIndex }; }
 
                 var ids = rows.map(function (row) { return field(row, 'Id'); });
-                opts.Ids = ids.join(',');
-                opts.StartIndex = 0;
-                opts.Limit = ids.length;
-                opts.EnableTotalRecordCount = false;
                 if (context.folder) {
                     // 文件夹那条查询里"文件夹"还包含相册目录等，而列表页路由的 type=Folder
                     // 会把这个 id 集合再过滤一次（数量和列表就对不上了），这里去掉类型过滤，
                     // 交给插件接口的口径决定
                     delete opts.IncludeItemTypes;
+                    // 条目级筛选也必须一起去掉：插件的文件夹查询本来就没套它们，
+                    // 只在按 id 取详情时套 → 列表直接空掉（9 个文件夹变 0 张卡片）
+                    stripItemFilters(opts);
                 }
 
-                return Promise.resolve(original.call(api, user, opts)).then(function (result) {
-                    var items = (result && result.Items) || [];
-                    var byId = {};
-                    items.forEach(function (item) { byId[item.Id] = item; });
-                    var ordered = ids.map(function (id) { return byId[id]; }).filter(Boolean);
+                return fetchByIds(original, api, user, opts, ids).then(function (ordered) {
                     return { Items: ordered, TotalRecordCount: total, StartIndex: startIndex };
                 });
             }, function () { return original.call(api, user, options); });
@@ -589,6 +601,40 @@
         }
     }
 
+    // 按 id 回原生接口取完整 DTO —— 分批发，避免一次塞几百个 GUID 把 URL 撑爆（414）。
+    // opts 由调用方准备好（SearchTerm/IncludeItemTypes 该删的已经删掉），这里只补 Ids/分页。
+    function fetchByIds(original, api, user, opts, ids) {
+        var batches = [];
+        for (var i = 0; i < ids.length; i += IDS_PER_REQUEST) {
+            batches.push(ids.slice(i, i + IDS_PER_REQUEST));
+        }
+
+        return Promise.all(batches.map(function (batch) {
+            var batchOpts = Object.assign({}, opts);
+            batchOpts.Ids = batch.join(',');
+            batchOpts.StartIndex = 0;
+            batchOpts.Limit = batch.length;
+            batchOpts.EnableTotalRecordCount = false;
+            return Promise.resolve(original.call(api, user, batchOpts)).then(function (result) {
+                return (result && result.Items) || [];
+            }, function () {
+                return [];
+            });
+        })).then(function (lists) {
+            var byId = {};
+            lists.forEach(function (items) {
+                items.forEach(function (item) { byId[item.Id] = item; });
+            });
+            var ordered = ids.map(function (id) { return byId[id]; }).filter(Boolean);
+            if (ids.length > 0 && ordered.length === 0) {
+                // 请求了 id 却一条都没取回来：多半是某个筛选/类型参数把结果过滤光了。
+                // 别静默失败（"播放点了没反应"当年就是这么来的），留一条线索。
+                console.warn('[FeatureEnhance] 按 id 取详情返回 0 条（ids=' + ids.length + '），检查是否有多余的筛选参数');
+            }
+            return ordered;
+        });
+    }
+
     // "文件夹"格子：把播放请求换成"文件夹内部的可播放条目"。
     // 取数仍然走插件接口（同一套匹配口径 + 原生筛选 + 权限），再按 id 回原生接口拿完整 DTO，
     // 最后照旧由原生播放器（列表页里那个 A.f.play / queue）负责播放 —— 我们只改"喂什么给它"。
@@ -600,18 +646,8 @@
             limit: Math.min(Math.max(limit, 1), LIST_LIMIT_MAX),
             sortBy: opts.SortBy,
             sortOrder: opts.SortOrder,
-            filters: opts.Filters,
-            videoTypes: opts.VideoTypes,
-            isHd: opts.IsHD,
-            is4K: opts.Is4K,
-            is3D: opts.Is3D,
-            hasSubtitles: opts.HasSubtitles,
-            hasTrailer: opts.HasTrailer,
-            hasThemeSong: opts.HasThemeSong,
-            hasThemeVideo: opts.HasThemeVideo,
-            hasSpecialFeature: opts.HasSpecialFeature,
-            tags: opts.Tags,
-            genres: opts.Genres,
+            // 与列表页同一口径：文件夹格子不套条目级筛选（否则带上那个自发的 IsFavorite
+            // 就一条都取不到，表现就是"随机播放点了没反应"）
             userId: userId()
         });
 
@@ -624,16 +660,12 @@
             delete playOpts.SearchTerm;
             // 列表页的 type=Folder 会被原样带到这次按 id 取详情上，那会把结果全过滤掉
             delete playOpts.IncludeItemTypes;
-            playOpts.Ids = ids.join(',');
-            playOpts.StartIndex = 0;
-            playOpts.Limit = ids.length;
-            playOpts.EnableTotalRecordCount = false;
+            // 关键：条目级筛选也必须剥掉。列表页会自发带上一个 IsFavorite，
+            // 留在这一跳就会把 300 条全过滤成 0 条 —— 播放器收到空列表，
+            // 连 /PlaybackInfo 都不发，直接弹"无法找到有效的媒体来源来播放"。
+            stripItemFilters(playOpts);
 
-            return Promise.resolve(original.call(api, user, playOpts)).then(function (result) {
-                var items = (result && result.Items) || [];
-                var byId = {};
-                items.forEach(function (item) { byId[item.Id] = item; });
-                var ordered = ids.map(function (id) { return byId[id]; }).filter(Boolean);
+            return fetchByIds(original, api, user, playOpts, ids).then(function (ordered) {
                 return { Items: ordered, TotalRecordCount: ordered.length, StartIndex: 0 };
             });
         }, function () {

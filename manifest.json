@@ -13,8 +13,8 @@
         "changelog": "Release 2.1.0.0",
         "targetAbi": "12.0.0.0",
         "sourceUrl": "https://github.com/duanzequn/jellyfin-plugin-pathsearch",
-        "checksum": "12a8a2c1075adda41d23cff9eeef9fab",
-        "timestamp": "2026-09-15T06:34:19Z",
+        "checksum": "87ccdebcaf380b0beeb7d35647c23cce",
+        "timestamp": "2026-09-15T10:47:11Z",
         "downloadUrl": "https://github.com/duanzequn/jellyfin-plugin-pathsearch/releases/download/v2.1.0.0/Jellyfin.Plugin.FeatureEnhance_2.1.0.0.zip"
       }
     ],
