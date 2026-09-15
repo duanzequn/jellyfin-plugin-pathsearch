@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Jellyfin.Plugin.FeatureEnhance</RootNamespace>
+    <AssemblyName>Jellyfin.Plugin.FeatureEnhance</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <!--
+    前端脚本的唯一来源是 tools/client-scripts/（不复制副本），
+    在编译时作为内嵌资源打进 DLL，运行时由 /FeatureEnhance/Client/{name}.js 提供。
+    改完 JS 只需重新 build 本插件，不需要动容器的任何文件。
+
+    LogicalName 的后半段就是访问路径里的文件名：
+      grid.js              → 视频卡片左上角的小眼睛 + 九宫格弹层
+      results.js           → 搜索结果：四个分类方格 + 原生列表页分页桥接
+      smooth.js            → 页面切换冻结帧 + 滚动恢复
+  -->
+  <!--
+    插件图标直接内嵌进 DLL（Jellyfin 的 IHasEmbeddedImage）：
+    手工把 DLL 丢进 plugins 目录时仪表盘也能显示图标，不需要旁边的 icon.png。
+    图标源文件是 docs/icon.svg（512×512，满幅方形），导出 docs/icon.png。
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\docs\icon.png"
+                      LogicalName="Jellyfin.Plugin.FeatureEnhance.icon.png" />
+    <EmbeddedResource Include="..\..\client-scripts\grid-hover-preview.js"
+                      LogicalName="Jellyfin.Plugin.FeatureEnhance.Web.grid.js" />
+    <EmbeddedResource Include="..\..\client-scripts\search-results.js"
+                      LogicalName="Jellyfin.Plugin.FeatureEnhance.Web.results.js" />
+    <EmbeddedResource Include="..\..\client-scripts\navigation-smooth.js"
+                      LogicalName="Jellyfin.Plugin.FeatureEnhance.Web.smooth.js" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Jellyfin.Controller" Version="12.0.0">
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <PackageReference Include="Jellyfin.Model" Version="12.0.0">
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <PackageReference Include="Jellyfin.Database.Implementations" Version="12.0.0">
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>

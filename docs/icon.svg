@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!--
+    Feature Enhance —— 插件图标（512×512，满幅方形，四角不透明、不带圆角）
+    结构：橙色渐变底 + 居中的太阳笑脸（12 根光芒 + 弯月眼 + 微笑 + 腮红）
+    渲染：node scripts/render-icon.mjs   ->  docs/icon.png
+  -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFCE5C"/>
+      <stop offset="0.45" stop-color="#FFA22A"/>
+      <stop offset="1" stop-color="#F2701A"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="0.42" cy="0.34" r="0.74">
+      <stop offset="0" stop-color="#FFFDF2"/>
+      <stop offset="0.5" stop-color="#FFE9A0"/>
+      <stop offset="1" stop-color="#FFC93C"/>
+    </radialGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" fill="url(#bg)"/>
+
+  <g stroke="#FFF3C4" stroke-width="26" stroke-linecap="round" opacity="0.95">
+    <line x1="406" y1="256" x2="458" y2="256"/>
+    <line x1="385.9" y1="331" x2="430.9" y2="357"/>
+    <line x1="331" y1="385.9" x2="357" y2="430.9"/>
+    <line x1="256" y1="406" x2="256" y2="458"/>
+    <line x1="181" y1="385.9" x2="155" y2="430.9"/>
+    <line x1="126.1" y1="331" x2="81.1" y2="357"/>
+    <line x1="106" y1="256" x2="54" y2="256"/>
+    <line x1="126.1" y1="181" x2="81.1" y2="155"/>
+    <line x1="181" y1="126.1" x2="155" y2="81.1"/>
+    <line x1="256" y1="106" x2="256" y2="54"/>
+    <line x1="331" y1="126.1" x2="357" y2="81.1"/>
+    <line x1="385.9" y1="181" x2="430.9" y2="155"/>
+  </g>
+
+  <circle cx="256" cy="270" r="128" fill="#D95C00" opacity="0.32" filter="url(#glow)"/>
+  <circle cx="256" cy="256" r="126" fill="url(#sun)"/>
+
+  <circle cx="184" cy="288" r="17" fill="#FF9A6B" opacity="0.55"/>
+  <circle cx="328" cy="288" r="17" fill="#FF9A6B" opacity="0.55"/>
+
+  <path d="M196 240 q20 -26 40 0" stroke="#7A3E06" stroke-width="17" fill="none" stroke-linecap="round"/>
+  <path d="M276 240 q20 -26 40 0" stroke="#7A3E06" stroke-width="17" fill="none" stroke-linecap="round"/>
+  <path d="M206 290 q50 54 100 0" stroke="#7A3E06" stroke-width="19" fill="none" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 1.0.0.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Resolve version
+        id: v
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and package
+        run: ./build.sh "${{ steps.v.outputs.version }}"
+
+      # the manifest is committed before tagging (build.sh writes checksum + download url),
+      # so a mismatch means the tag does not match the packaged artifact
+      - name: Verify manifest checksum
+        run: |
+          python3 - "${{ steps.v.outputs.version }}" <<'PY'
+          import hashlib, json, sys
+          version = sys.argv[1]
+          entry = next(v for v in json.load(open('manifest.json'))[0]['versions'] if v['version'] == version)
+          actual = hashlib.md5(open('dist/Jellyfin.Plugin.FeatureEnhance_%s.zip' % version, 'rb').read()).hexdigest()
+          print('manifest:', entry['checksum'])
+          print('artifact:', actual)
+          if entry['checksum'] != actual or 'TO_BE_FILLED' in entry['checksum']:
+              sys.exit('manifest checksum does not match the packaged zip - run ./build.sh and commit manifest.json first')
+          PY
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.v.outputs.version }}
+          name: v${{ steps.v.outputs.version }}
+          files: dist/*.zip
+          generate_release_notes: true
